@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# relay-ring <doorbell-topic> — ring the channel doorbell.
+# Contentless by design: the ring only means "read the channel".
+[ -n "$1" ] || { echo "usage: relay-ring <doorbell-topic>" >&2; exit 2; }
+exec curl -s -o /dev/null -d ring "https://${NTFY_HOST:-ntfy.sh}/$1"
