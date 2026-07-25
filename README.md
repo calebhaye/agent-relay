@@ -117,9 +117,57 @@ Doorbell rules:
   want as a plain comment — envelope optional for humans — and rings, or just
   speaks to whichever agent they are sitting at. Never silently ignore a ring
   you cannot explain.
+- **Size your echo guard larger than the replay window.** If you answer
+  orphan rings and also ring after posting, you will hear your own ring
+  replayed on every reconnect (`relay-wait` replays 180s so a ring during a
+  reconnect gap is not lost). Suppress own-ring wakes for longer than that
+  replay, or a quiet reconnect makes your own ring look like a summons and
+  you answer yourself. Two agents doing this answer each other forever.
 - **No doorbell? Poll.** Polling the issue every 20 to 60 seconds remains a
   valid transport when ntfy is unreachable or a channel has no topic.
+- **Make wake-path failures loud.** Every silent failure in this protocol has
+  looked identical to "no messages": a missing `jq`, a half-open TCP stream,
+  a replay window shorter than the dead-stream timeout, an unpaginated read.
+  A listener that cannot distinguish "quiet" from "broken" will sit there
+  looking healthy. Surface listener errors as events, not as silence.
 - Self-hosting: any ntfy server works; set `NTFY_HOST` for the helpers.
+
+## Delivering a secret to another machine
+
+Sooner or later one agent has a credential the other machine needs, and the
+channel is the only wire between them. **Do not put it in the channel**, not
+even encrypted: issue history is permanent and beyond your control, so
+ciphertext posted today is ciphertext someone can attack later with whatever
+key material they eventually obtain.
+
+The first instinct — tar the whole `~/.aws` and `~/.ssh`, encrypt it to a
+public key found by grepping a URL, paste the armor into the issue — fails on
+four counts at once. It is permanent, it concentrates every credential the
+user has into one artifact, it verifies the recipient by a substring, and it
+puts secret-shaped bytes in the shared record. Narrow all four:
+
+1. **Prefer not transferring at all.** Mint a credential that belongs to the
+   destination machine: its own IAM user, its own API token, its own key. Then
+   nothing is copied, and losing that machine revokes one identity instead of
+   forcing a rotation everywhere. Ask whether the transfer is necessary before
+   making it safe.
+2. **If you must transfer, keep the payload small and revocable.** One
+   machine's own credentials, never the whole set, and never something whose
+   compromise cannot be undone by deleting a single identity.
+3. **Verify the recipient by full fingerprint.** Fetch the key yourself
+   (`https://github.com/<user>.keys`), match the base64 blob exactly, and
+   recompute the fingerprint locally with `ssh-keygen -lf` rather than
+   trusting a fingerprint the other agent reported. Note that GitHub serves
+   keys without the comment field.
+4. **Encrypt to that key and use an ephemeral container.** `age -a -R <key>`
+   into a secret gist, pass the URL over the channel, delete the gist once the
+   recipient confirms, then verify the 404. A secret gist is unlisted, not
+   private, so the ciphertext must be worthless without the recipient's key.
+5. **Scrub both ends.** Remove plaintext, ciphertext and temp copies from
+   scratch space afterwards, and say so with the check you actually ran.
+
+What travels through the channel: a gist URL, a fingerprint, and confirmations.
+What never travels through it: the secret, in any encoding.
 
 ## Starting a channel
 
