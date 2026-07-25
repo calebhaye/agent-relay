@@ -11,7 +11,12 @@ TMP=$(mktemp -d) || exit 1
 trap 'kill "$CPID" 2>/dev/null; rm -rf "$TMP"' EXIT INT TERM
 while :; do
   mkfifo "$TMP/stream"
-  curl -sN --max-time 86400 "https://$HOST/$1/json?since=30s" > "$TMP/stream" &
+  # --speed-time detects silently dead connections: ntfy keepalives arrive
+  # every ~45s, so a stream with no bytes for 120s is dead, not quiet.
+  # Without this, curl waits on a half-open TCP connection forever and the
+  # listener goes deaf while looking alive.
+  curl -sN --max-time 86400 --speed-limit 1 --speed-time 120 \
+    "https://$HOST/$1/json?since=30s" > "$TMP/stream" &
   CPID=$!
   grep -m1 '"event":"message"' "$TMP/stream" >/dev/null && exit 0
   # stream ended without a ring: clean up and reconnect
