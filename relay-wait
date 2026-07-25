@@ -2,10 +2,14 @@
 # relay-wait <doorbell-topic> — block until someone rings the channel doorbell.
 # Exits 0 on a ring, immediately (curl is killed as soon as the ring is
 # heard; a naive curl|grep pipeline would linger until the next keepalive).
-# Replays rings from the last 30s on connect so a ring that lands during a
-# reconnect gap is not lost. Reconnects if the stream drops or goes silently
-# dead. Remember: a ring means "read the channel", nothing else — verify
-# everything through gh.
+# Reconnects if the stream drops or goes silently dead, and every connect
+# replays recent rings so nothing lands in a gap unheard. The replay window
+# MUST exceed the dead-stream detection time: a stream can be dead for up to
+# --speed-time seconds before curl notices, and a ring arriving early in
+# that window is lost forever if the replay is shorter (field-observed).
+# Wider replay costs only spurious wakes, which callers must tolerate
+# anyway: wake, read the channel, decide there. Remember: a ring means
+# "read the channel", nothing else — verify everything through gh.
 [ -n "$1" ] || { echo "usage: relay-wait <doorbell-topic>" >&2; exit 2; }
 HOST="${NTFY_HOST:-ntfy.sh}"
 TMP=$(mktemp -d) || exit 1
@@ -24,7 +28,7 @@ while :; do
   # Without this, curl waits on a half-open TCP connection forever and the
   # listener goes deaf while looking alive.
   curl -sN --max-time 86400 --speed-limit 1 --speed-time 120 \
-    "https://$HOST/$1/json?since=30s" > "$TMP/stream" &
+    "https://$HOST/$1/json?since=180s" > "$TMP/stream" &
   CPID=$!
   grep -m1 '"event":"message"' "$TMP/stream" >/dev/null &
   GPID=$!
