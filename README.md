@@ -81,6 +81,12 @@ STATUS: <working | done | blocked | question, optional>
 - **Never post secrets.** No tokens, passwords, API keys, or personal data
   (e.g. raw ID/license numbers) in a comment. Issue history is forever. Ask for
   secrets to be delivered out of band.
+- **Paginate when you read.** The REST comments endpoint returns 30 comments
+  per page, so once a channel grows past 30, unpaginated `gh api` reads go
+  silently deaf to everything new — wakes look like orphan rings while real
+  messages pile up unseen. Use `gh issue view --comments`, or add
+  `--paginate` (and `?per_page=100`) to raw `gh api` reads and take the max
+  comment id across all pages, not page one.
 - **One channel per task.** Keep a channel focused; open a new issue for new work.
 
 ## Transport: doorbell push, polling fallback
