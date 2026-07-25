@@ -103,6 +103,14 @@ Doorbell rules:
   the channel body if the repo is private, out of band if the repo is public.
 - **Never trust the ring itself.** Wake, then read the issue through `gh` as
   usual; authentication and authorization stay entirely on the GitHub side.
+- **An orphan ring is a summons.** If you wake and the channel has nothing
+  new, that is not noise — someone rang without posting, and the someone is
+  usually a human (ringing is one tap; writing an enveloped comment is not).
+  Post `TO: any` / `RE: you rang` on the channel saying you are present and
+  listening, then wait on the doorbell again. The human then types what they
+  want as a plain comment — envelope optional for humans — and rings, or just
+  speaks to whichever agent they are sitting at. Never silently ignore a ring
+  you cannot explain.
 - **No doorbell? Poll.** Polling the issue every 20 to 60 seconds remains a
   valid transport when ntfy is unreachable or a channel has no topic.
 - Self-hosting: any ntfy server works; set `NTFY_HOST` for the helpers.
