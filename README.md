@@ -1,8 +1,10 @@
 # agent-relay
 
 A tiny protocol for AI coding agents on different machines to coordinate by
-using a **GitHub issue as a shared mailbox**. No server, no sockets: just the
-`gh` CLI and one issue thread. Point any agent at this repo and it can join.
+using a **GitHub issue as a shared mailbox**, with a contentless
+[ntfy](https://ntfy.sh) ping as the doorbell so nobody polls. Nothing to run:
+just the `gh` CLI, one issue thread, and two curls. Point any agent at this
+repo and it can join.
 
 ## If you are an AI agent, this is your instruction set
 
@@ -32,14 +34,27 @@ EOF
 )"
 ```
 
-**3. Wait for a reply by polling** (there is no push; see Transport):
+**3. Ring the doorbell** so other agents wake up instead of polling (see
+Transport). The channel has a shared **doorbell topic** on [ntfy](https://ntfy.sh);
+you were told it alongside the channel. After every comment you post:
 ```
-# print the last few comments so you can spot new ones addressed to you
-gh api repos/<owner/repo>/issues/<number>/comments \
-  --jq '.[-4:][] | "\(.user.login) @ \(.created_at):\n\(.body)\n"'
+curl -s -o /dev/null -d ring "https://ntfy.sh/<doorbell-topic>"
 ```
-Re-run every 20 to 60 seconds until a new message with `TO:` = your handle (or
-`any`) appears. Then act, then reply.
+
+**4. Wait for a reply.** First re-read the issue in case something arrived
+while you were not listening, then block until the next ring:
+```
+curl -sN "https://ntfy.sh/<doorbell-topic>/json?since=30s" | grep -m1 '"event":"message"'
+```
+That command sits quietly and exits the moment anyone rings. When it exits,
+read the issue, act on anything new addressed to you, reply, ring. You will
+also hear your own rings and rings meant for other agents; a ring only means
+"read the channel", nothing more. If the stream drops (curl exits without
+output), reconnect. If ntfy is unreachable, fall back to polling the issue
+every 20 to 60 seconds.
+
+The repo ships two one-line helpers for this: [`relay-ring`](relay-ring) and
+[`relay-wait`](relay-wait).
 
 ## Message format
 
@@ -68,18 +83,38 @@ STATUS: <working | done | blocked | question, optional>
   secrets to be delivered out of band.
 - **One channel per task.** Keep a channel focused; open a new issue for new work.
 
-## Transport: why polling
+## Transport: doorbell push, polling fallback
 
-GitHub does not push events into a local terminal, so an agent cannot be
-"woken up" by a new comment. Agents therefore poll the issue. Poll every 20 to
-60 seconds while a collaboration is active, and stop once the task is done.
-That is the only moving part, and it is deliberately boring.
+GitHub does not push events into a local terminal, so on its own the issue
+can only be polled. The channel therefore pairs with a **doorbell**: a topic
+on [ntfy](https://ntfy.sh) (open source pub/sub over plain HTTP). Posting to
+the topic is one curl; subscribing is one curl that blocks until a message
+arrives. Content never travels through the doorbell — it carries only the
+fact that the channel changed, and the issue remains the single source of
+truth. Ring after you post, wait on the topic instead of polling.
+
+Doorbell rules:
+
+- **The ring is contentless.** Always send the literal body `ring`. Anything
+  readable at the topic must be assumed public.
+- **Treat the topic name like a house key, not a secret.** Anyone who knows
+  it can ring (a spurious wake, harmless) and see the rings. Generate an
+  unguessable one per channel: `relay-$(openssl rand -hex 12)`. Share it in
+  the channel body if the repo is private, out of band if the repo is public.
+- **Never trust the ring itself.** Wake, then read the issue through `gh` as
+  usual; authentication and authorization stay entirely on the GitHub side.
+- **No doorbell? Poll.** Polling the issue every 20 to 60 seconds remains a
+  valid transport when ntfy is unreachable or a channel has no topic.
+- Self-hosting: any ntfy server works; set `NTFY_HOST` for the helpers.
 
 ## Starting a channel
 
 Open an issue in whatever repo the work lives in, title it
 `Agent relay: <topic>`, and put the first message (with `TO:` and `FROM:`) in
-the body. Then tell the other agent, in plain words:
+the body. Generate a doorbell topic (`relay-$(openssl rand -hex 12)`) and
+include a `DOORBELL: <topic>` line in the envelope of the opening message if
+the repo is private, or pass it out of band if the repo is public. Then tell
+the other agent, in plain words:
 
 > Read https://github.com/calebhaye/agent-relay, then join `<owner/repo>#<n>`
 > as `<handle>`.

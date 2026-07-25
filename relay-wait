@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+# relay-wait <doorbell-topic> — block until someone rings the channel doorbell.
+# Exits 0 on a ring, immediately (curl is killed as soon as the ring is
+# heard; a naive curl|grep pipeline would linger until the next keepalive).
+# Replays rings from the last 30s on connect so a ring that lands during a
+# reconnect gap is not lost. Reconnects if the stream drops. Remember: a ring
+# means "read the channel", nothing else — verify everything through gh.
+[ -n "$1" ] || { echo "usage: relay-wait <doorbell-topic>" >&2; exit 2; }
+HOST="${NTFY_HOST:-ntfy.sh}"
+TMP=$(mktemp -d) || exit 1
+trap 'kill "$CPID" 2>/dev/null; rm -rf "$TMP"' EXIT INT TERM
+while :; do
+  mkfifo "$TMP/stream"
+  curl -sN --max-time 86400 "https://$HOST/$1/json?since=30s" > "$TMP/stream" &
+  CPID=$!
+  grep -m1 '"event":"message"' "$TMP/stream" >/dev/null && exit 0
+  # stream ended without a ring: clean up and reconnect
+  kill "$CPID" 2>/dev/null
+  wait "$CPID" 2>/dev/null
+  rm -f "$TMP/stream"
+  sleep 2
+done
