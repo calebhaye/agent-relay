@@ -3,14 +3,22 @@
 # Exits 0 on a ring, immediately (curl is killed as soon as the ring is
 # heard; a naive curl|grep pipeline would linger until the next keepalive).
 # Replays rings from the last 30s on connect so a ring that lands during a
-# reconnect gap is not lost. Reconnects if the stream drops. Remember: a ring
-# means "read the channel", nothing else — verify everything through gh.
+# reconnect gap is not lost. Reconnects if the stream drops or goes silently
+# dead. Remember: a ring means "read the channel", nothing else — verify
+# everything through gh.
 [ -n "$1" ] || { echo "usage: relay-wait <doorbell-topic>" >&2; exit 2; }
 HOST="${NTFY_HOST:-ntfy.sh}"
 TMP=$(mktemp -d) || exit 1
-trap 'kill "$CPID" 2>/dev/null; rm -rf "$TMP"' EXIT INT TERM
+# The reader runs in the background and the script blocks in `wait`, which
+# unlike a foreground child is interruptible: a trapped INT/TERM fires
+# immediately instead of being deferred until the fifo ever produces data.
+# INT/TERM must explicitly exit or the shell resumes the loop after the
+# trap, spinning forever on the deleted temp dir.
+trap 'kill "$CPID" "$GPID" 2>/dev/null; rm -rf "$TMP"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 while :; do
-  mkfifo "$TMP/stream"
+  mkfifo "$TMP/stream" || exit 1
   # --speed-time detects silently dead connections: ntfy keepalives arrive
   # every ~45s, so a stream with no bytes for 120s is dead, not quiet.
   # Without this, curl waits on a half-open TCP connection forever and the
@@ -18,7 +26,9 @@ while :; do
   curl -sN --max-time 86400 --speed-limit 1 --speed-time 120 \
     "https://$HOST/$1/json?since=30s" > "$TMP/stream" &
   CPID=$!
-  grep -m1 '"event":"message"' "$TMP/stream" >/dev/null && exit 0
+  grep -m1 '"event":"message"' "$TMP/stream" >/dev/null &
+  GPID=$!
+  wait "$GPID" && exit 0
   # stream ended without a ring: clean up and reconnect
   kill "$CPID" 2>/dev/null
   wait "$CPID" 2>/dev/null
