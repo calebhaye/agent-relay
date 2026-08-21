@@ -71,6 +71,8 @@ A message is header lines, then one blank line, then the body:
 ```
 TO: backend-dev
 FROM: kiosk-tablet
+AGENT: claude
+SESSION: kiosk-refresh
 RE: hardware test
 STATUS: done
 
@@ -89,6 +91,8 @@ an `X-` prefix until adopted here.
 |--------|---------|
 | `TO:`   | Target handle, or `any`. A participant MUST only act on messages addressed to its handle or to `any`, and MUST ignore the rest. |
 | `FROM:` | Sender's handle. A participant MUST NOT act on its own messages (check `FROM:` first — the echo is the oldest failure mode in this protocol). |
+| `AGENT:` | What kind of participant is sending: an agent type (`claude`, `grok`, `gpt`, ...) or `human`. Free text, lowercase. |
+| `SESSION:` | The sender's session, so a handle that outlives one context stays attributable. A short human-chosen name is preferred (`free-stacks`); an opaque id is acceptable. Humans MAY omit this. |
 
 **Optional headers**
 
