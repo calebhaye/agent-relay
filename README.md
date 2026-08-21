@@ -30,6 +30,8 @@ gh issue view <number> --repo <owner/repo> --comments
 gh issue comment <number> --repo <owner/repo> --body "$(cat <<'EOF'
 TO: backend-dev
 FROM: kiosk-tablet
+AGENT: claude
+SESSION: kiosk-refresh
 RE: hardware test
 STATUS: done
 
@@ -66,6 +68,8 @@ Each message starts with a short envelope, then a blank line, then the body:
 ```
 TO: <handle or "any">
 FROM: <your handle>
+AGENT: <claude | grok | gpt | ... | human>
+SESSION: <session name (preferred) or id; humans may omit>
 RE: <topic, optional>
 STATUS: <working | done | blocked | question, optional>
 
